@@ -50,11 +50,11 @@ def read_calibration_file(file_path):
         
     return None
 
+res = param_calibration()
+print(res)
 
-'''
-# Testing live keyboard input
 
-NORMAL_POLARITY = True
+POLARITY_FLIPPED = False
 MAX_MIN_VOLTAGE_THRESHOLD = 0.5
 
 def asynch_keyboard_listener():
@@ -64,11 +64,11 @@ def asynch_keyboard_listener():
 		handle_commands(line)
 
 def handle_commands(line):
-	global MAX_MIN_VOLTAGE_THRESHOLD, NORMAL_POLARITY
+	global MAX_MIN_VOLTAGE_THRESHOLD, POLARITY_FLIPPED
 
 	if line.lower() == "p":
-		NORMAL_POLARITY = not NORMAL_POLARITY
-		print(f"Polarity Flipped!\nCurrent: {"Peak-Min" if NORMAL_POLARITY else "Min-Peak"}")
+		POLARITY_FLIPPED = not POLARITY_FLIPPED
+		print(f"Polarity Flipped!\nCurrent: {"Min-Peak" if POLARITY_FLIPPED else "Peak-Min"}")
 	
 	if line.lower().startswith("t"):
 		try:
@@ -79,4 +79,4 @@ def handle_commands(line):
 			print('Invalid Sequence\nEnsure input format follows "t ___"')
 			
 asynch_keyboard_listener()
-'''
+

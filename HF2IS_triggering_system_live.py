@@ -21,6 +21,8 @@ NUM_FRAMES = 12 # This is the number of frames that the program looks at when ru
 NUM_SUB_BUFFERS = 5000 # This sets the number of frames that each circular buffer holds. Do not set to less than 100.
 INST_SAMPLE_DELAY = 0.0035
 INST_CLK_SYNC_DELAY = 0.001
+POLARITY_FLIPPED = False # Normal polarity means peak comes before min, flipped means min comes before peak
+
 
 min_val = 9999999999
 # Create directory to store snapshots
@@ -78,7 +80,6 @@ LF_PHASE_RANGE = config["LF_PHASE_RANGE"]
 LF_BASELINE_PEAK_VOLTAGE = config["LF_BASELINE_PEAK_VOLTAGE"]
 
 
-
 # input/output detection and commands
 def asynch_keyboard_listener():
 	print("Enter 'p' to flip polarity\nEnter 't' followed by a number to set threshold")
@@ -89,19 +90,19 @@ def asynch_keyboard_listener():
 		handle_commands(line)
 
 def handle_commands(line):
-	global MAX_MIN_VOLTAGE_THRESHOLD, NORMAL_POLARITY
-	
+	global MAX_MIN_VOLTAGE_THRESHOLD, POLARITY_FLIPPED
+
 	if line.lower() == "p":
-		NORMAL_POLARITY = not NORMAL_POLARITY
-		print(f"\nPolarity Flipped!\nCurrent: {"Max-Min" if NORMAL_POLARITY else "Min-Max"}")
+		POLARITY_FLIPPED = not POLARITY_FLIPPED
+		print(f"Polarity Flipped!\nCurrent: {"Min-Peak" if POLARITY_FLIPPED else "Peak-Min"}")
 	
 	if line.lower().startswith("t"):
 		try:
 			_, val = line.split()
 			MAX_MIN_VOLTAGE_THRESHOLD = float(val)
-			print(f"Changed Threshold!\nCurrent: {val}V")
+			print(f"Changed Threshold!\nCurrent: {val} V")
 		except:
-			print('Invalid Sequence\nEnsure input format follows "t (threshold)"')
+			print('Invalid Sequence\nEnsure input format follows "t ___"')
 
 # Delay and Trigger functions
 def trigger_function(pin):
@@ -361,17 +362,28 @@ for i in range(NUM_LOOPS):
 	# if i > 0:
 		# print(f"loop {i} after rolling buffer assignment = {((time.time()) * 1000 % 10000):.3f} ms") 
 
+	# polarity conditions
+	is_threshold_breached = False
+
+	if not POLARITY_FLIPPED: # max comes before min (normal)
+		# normal polarity, threshold breached when we get a value thats greater than the max threshold + rolling mean
+		is_threshold_breached =  r_window[max_index] > (MAX_VOLTAGE_THRESHOLD + np.mean(rolling_avg))
+		peak_time_dif = (t_window[min_index] - t_window[max_index]) * MFIA_CLK_PERIOD
+		leading_peak_time = t_window[max_index]
 	
-	if (r_window[max_index] > (MAX_VOLTAGE_THRESHOLD + np.mean(rolling_avg))):
-		
+	else: # min comes before max
+		is_threshold_breached = r_window[min_index] < (np.mean(rolling_avg) - MAX_VOLTAGE_THRESHOLD)
+		peak_time_dif = (t_window[max_index] - t_window[min_index]) * MFIA_CLK_PERIOD
+		leading_peak_time = t_window[min_index]
+	
+	if is_threshold_breached:
 		if (last_activated_state == 8):
 			# Save snapshot of activation
 			run_function_after_delay(0, lambda: save_snapshot(r_window, t_window))
 		last_activated_state += 1
 		
 		# Calculate time difference and voltage difference between peaks
-		peak_time_dif = (t_window[min_index] - t_window[max_index]) * MFIA_CLK_PERIOD # in s
-		peak_voltage_dif = r_window[max_index] - r_window[min_index]
+		peak_voltage_dif = abs(r_window[max_index] - r_window[min_index]) # abs to guarantee positive voltage diff
 		# print(f"loop {i} inside first peak detect = {((time.time()) * 1000 % 10000):.3f} ms, prev V_dif = {prev_peak_voltage_dif}, current V_dif = {peak_voltage_dif}") 
 		# Trigger Condition. Checks the following:
 		# Large enough voltage difference
@@ -385,7 +397,8 @@ for i in range(NUM_LOOPS):
 			
 			# Trigger the trigger function
 			print(f"trigger function called at {time.time()}")
-			calculate_delay_and_trigger(peak_time_dif, PIN, t_window[max_index])
+			# leading_peak_time is the timestamp of whatever peak occurs first in time (min peak or max peak depending on polarity)
+			calculate_delay_and_trigger(peak_time_dif, PIN, leading_peak_time)
 			
 			# Peak Statistics
 			print(f"Vmax  = {r_window[max_index]:.3f} V |") 

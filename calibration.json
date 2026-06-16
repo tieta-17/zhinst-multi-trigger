@@ -10,7 +10,6 @@
 	"low_frequency_lf": {
 		"bead_phase_mean": 1.45,
 		"baseline_to_peak_voltage": 2.38,
-		"phase_range-box:": [-1.2, 1.2]
+		"phase_range_box": [-1.2, 1.2]
 	}
-
 }

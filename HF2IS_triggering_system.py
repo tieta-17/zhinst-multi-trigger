@@ -215,7 +215,6 @@ poll_error = False
 clk_sync_ready = False
 
 print("Ready to Receive Data!")
-asynch_keyboard_listener()
 start_time = time.time()
 
 # main loop
