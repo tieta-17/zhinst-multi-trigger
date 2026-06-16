@@ -1,0 +1,16 @@
+{
+	"calibration_metadata": {
+		"bead_size_um": 5.0,
+		"notes": "Using baseline-to-peak voltage calibration instead of min-to-peak"
+	},
+	"high_frequency_hf": {
+		"bead_phase_mean": 0.125,
+		"phase_range_box": [-0.5,0.5]
+	},
+	"low_frequency_lf": {
+		"bead_phase_mean": 1.45,
+		"baseline_to_peak_voltage": 2.38,
+		"phase_range-box:": [-1.2, 1.2]
+	}
+
+}
