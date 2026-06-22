@@ -460,7 +460,10 @@ for i in range(NUM_LOOPS):
 			# Check if the function is repeating data
 			prev_timestamps = [t_window[min_index], t_window[max_index]]
 			
-			# Check if the cell is dead or alive
+			# To classify cell as dead or alive, look at where the phase at the peak lies compared to ranges given in calibration.json
+			# lf_phase_range = [min_phase, max_phase]
+			# hf_phase_range = [min_phase, max_phase]
+			# if the lf_phase_at_peak and hf_phase_at_peak fall within this window --> cell is alive, trigger
 			lf_phase_at_peak = lf_phase_window[detection_index]
 			hf_phase_at_peak = hf_phase_window[detection_index]
 
@@ -468,6 +471,7 @@ for i in range(NUM_LOOPS):
 			lf_phase_centered = lf_phase_at_peak - LF_BEAD_PHASE_MEAN
 			hf_phase_centered = hf_phase_at_peak - HF_BEAD_PHASE_MEAN
 
+			# check if cell is in window
 			is_lf_in_window = LF_PHASE_RANGE[0] < lf_phase_centered < LF_PHASE_RANGE[1]
 			is_hf_in_window = HF_PHASE_RANGE[0] < hf_phase_centered < HF_PHASE_RANGE[1]
 
