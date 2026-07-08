@@ -84,11 +84,13 @@ MAX_VOLTAGE_THRESHOLD = LF_BASELINE_PEAK_VOLTAGE
 
 
 # input/output detection and commands
+# input/output detection and commands
 def asynch_keyboard_listener():
     print("Enter 'p' to flip polarity\n" \
           "Enter 't' followed by a number to set threshold (mV)\n" \
           "Enter 'd' followed by a number to set solenoid delay (ms)\n" \
-          "Enter 'd' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)")
+          "Enter 'd' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
+          "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time")
     while True:
         # polls stdin for input, waiting for newline to read input
         line = sys.stdin.readline().strip()
@@ -96,7 +98,7 @@ def asynch_keyboard_listener():
         handle_commands(line)
 
 def handle_commands(line):
-    global MAX_VOLTAGE_THRESHOLD, POLARITY_FLIPPED, SOLENOID_DELAY, SOLENOID_1_DURATION, SOLENOID_2_DURATION
+    global MAX_VOLTAGE_THRESHOLD, POLARITY_FLIPPED, SOLENOID_DELAY, SOLENOID_1_DURATION, SOLENOID_2_DURATION, TRIGGER_LEAD_TIME_OFFSET
 
     if line.lower() == "p":
         POLARITY_FLIPPED = not POLARITY_FLIPPED
@@ -134,6 +136,16 @@ def handle_commands(line):
                     
         except:
             print('Invalid Sequence\nEnsure input format follows "d ___"')
+
+    if line.lower().startswith("l"):
+        try:
+            # l {time} --> sets TRIGGER_LEAD_TIME_OFFSET (ms), the manual fixed-latency
+            # correction added on top of the per-bead-derived trigger_lead_time
+            _, val = line.split()
+            TRIGGER_LEAD_TIME_OFFSET = float(val) / 1000
+            print(f"Changed trigger lead time offset!\nCurrent: {val} ms")
+        except:
+            print('Invalid Sequence\nEnsure input format follows "l ___"')
 
 
 # Delay and Trigger functions
@@ -255,6 +267,11 @@ device.demods[0].adcselect(0) # Set to Signal Voltage Input
 # device.imps[0].enable(0) # Hopefully turn off measurement control
 device.demods[0].rate(SAMPLING_RATE) # Set Sampling Rate
 
+device.demods[1].enable(True)
+device.demods[1].adcselect(0) # Set to Signal Voltage Input
+# device.imps[0].enable(0) # Hopefully turn off measurement control
+device.demods[1].rate(SAMPLING_RATE) # Set Sampling Rate
+
 
 time.sleep(0.1)
 print("Sampling Rate = ",device.demods[0].rate())
@@ -359,8 +376,30 @@ clk_sync_ready = False
 print("Ready to Receive Data!")
 
 start_time = time.time()
+
+# timing constants
+# holds the timestamp in which the last trigger occured
 last_trigger_timestamp  = 0
+
+# DEBOUNCE_PERIOD is the minimum time between triggers. Any trigger less than DEBOUNCE_PERIOD is void
 DEBOUNCE_PERIOD = 0.100 # 100ms debounce period
+
+# DETECTION_TO_ACTUATION_UM is the distance from detection from the sensors to actuation with the solenoids
+# DETECTION_WINDOW_UM is the distance of the sensors
+# These parameters are provided by the user
+
+DETECTION_TO_ACTUATION_UM = 5450
+DETECTION_WINDOW_UM = 200
+DISTANCE_RATIO = DETECTION_TO_ACTUATION_UM / DETECTION_WINDOW_UM
+
+
+# TRIGGER_LEAD_TIME_OFFSET is for latencies that do NOT scale with flow rate
+# (GPIO edge delay, cabling, mechanical solenoid opening lag) -- tune this with
+# the 'l' command while watching % deflection. NOTE: the old hardcoded value here
+# was 0.07s;
+TRIGGER_LEAD_TIME_OFFSET = 0.0
+
+trigger_count = 0
 
 # main loop
 for i in range(NUM_LOOPS):
@@ -530,6 +569,7 @@ for i in range(NUM_LOOPS):
 
             if (is_lf_in_window and is_hf_in_window):
                 print("Cell classified as live!")
+                trigger_count += 1
                 last_trigger_timestamp = current_timestamp
                 # Trigger the trigger function
                 print(f"Trigger function called at {time.time()}")
@@ -547,6 +587,7 @@ for i in range(NUM_LOOPS):
                 print(f"time since start        = {(time.time() - start_time):.3f} s")
                 print(f"time since acq of data  = {(time.time() - loop_time)*1000:.3f} ms")
                 print(f"time since loop start   = {(time.time() - start_loop_time)*1000:.3f} ms\n")
+                print(f"number of triggers since start of loop: {trigger_count}\n")
                 triggered = True
                 prev_peak_voltage_dif = peak_voltage_dif
     
