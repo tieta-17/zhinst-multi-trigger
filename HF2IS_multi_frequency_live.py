@@ -98,7 +98,7 @@ def asynch_keyboard_listener():
         handle_commands(line)
 
 def handle_commands(line):
-    global MAX_VOLTAGE_THRESHOLD, POLARITY_FLIPPED, SOLENOID_DELAY, SOLENOID_1_DURATION, SOLENOID_2_DURATION, TRIGGER_LEAD_TIME_OFFSET
+    global MAX_VOLTAGE_THRESHOLD, POLARITY_FLIPPED, SOLENOID_PAIR_DELAY, SOLENOID_1_DURATION, SOLENOID_2_DURATION, TRIGGER_LEAD_TIME_OFFSET
 
     if line.lower() == "p":
         POLARITY_FLIPPED = not POLARITY_FLIPPED
@@ -118,7 +118,7 @@ def handle_commands(line):
             # d {num} {time} --> sets duration of solenoid {num} to {time} (ms)
             parts = line.split()
             if len(parts) == 2:
-                SOLENOID_DELAY = float(parts[1]) / 1000
+                SOLENOID_PAIR_DELAY = float(parts[1]) / 1000
                 print(f"Changed solenoid trigger delay!\nCurrent: {parts[1]} ms")
             elif len(parts) == 3:
                 solenoid_id = int(parts[1])
@@ -163,7 +163,7 @@ def run_function_after_delay(delay, function):
     timer = threading.Timer(delay, function)
     timer.start()
 
-def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_duration = 0.05):
+def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_duration = 0.05, extra_delay = 0.0):
     
     timestamp_difference = peak_timestamp - time_sync[1]
     instrument_time_difference = MFIA_CLK_PERIOD * timestamp_difference
@@ -175,7 +175,14 @@ def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_durati
 
     # SOLENOID_PAIR_DELAY is time between triggering solenoid 1 and solenoid 2
 
-    trigger_delay = 0.07 - peak_current_time_dif - INST_SAMPLE_DELAY + SOLENOID_PAIR_DELAY #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
+    # Derive this bead's travel time to the actuation zone from its OWN measured
+    # transit time across the detection window (peak_time_dif), scaled by the
+    # distance ratio, instead of assuming a fixed flow rate. This self-corrects
+    # for flow rate drift and per-bead velocity variation automatically.
+
+    # extra_delay is to account for solenoid 1 and 2 triggering at different times
+    trigger_lead_time = peak_time_dif * DISTANCE_RATIO
+    trigger_delay = trigger_lead_time + TRIGGER_LEAD_TIME_OFFSET - peak_current_time_dif - INST_SAMPLE_DELAY + extra_delay #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
     run_function_after_delay(trigger_delay, lambda: trigger_function(pin, pulse_duration))
     
     print(f"inst t dif: {instrument_time_difference * 1000:.3f} ms, sys t dif: {system_time_difference * 1000:.3f} ms, peak_current_time_dif = {peak_current_time_dif * 1000:.3f} ms, trigger_delay = {trigger_delay * 1000:.3f} ms, current time = {time.time():.3f}")
@@ -577,7 +584,7 @@ for i in range(NUM_LOOPS):
                 calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_1, leading_peak_time, SOLENOID_1_DURATION)
 
                 # trigger second solenoid some time (SOLENOID_DELAY) after the first pin
-                calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_2 , leading_peak_time, SOLENOID_2_DURATION )
+                calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_2 , leading_peak_time, SOLENOID_2_DURATION, extra_delay= SOLENOID_PAIR_DELAY)
                 
             
                 # Peak Statistics
