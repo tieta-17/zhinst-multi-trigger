@@ -85,12 +85,12 @@ MAX_VOLTAGE_THRESHOLD = LF_BASELINE_PEAK_VOLTAGE
 
 def print_controls():
     print("Enter 'p' to flip polarity\n" \
-          "Enter 't' followed by a number to set threshold (mV)\n" \
-          "Enter 's' followed by a number to set solenoid delay (ms)\n" \
-          "Enter 's' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
-          "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time\n" \
-          "Enter 'd' followed by a number to set debounce period (ms)" \
-          "Enter 'help' to view commands again")
+        "Enter 't' followed by a number to set threshold (mV)\n" \
+        "Enter 's' followed by a number to set solenoid delay (ms)\n" \
+        "Enter 's' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
+        "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time\n" \
+        "Enter 'd' followed by a number to set debounce period (ms)" \
+        "Enter 'help' to view commands again")
 def asynch_keyboard_listener():
     print_controls()
     while True:
@@ -149,11 +149,11 @@ def handle_commands(line):
         except:
             print('Invalid Sequence\nEnsure input format follows "l ___"')
     if line.lower().startswith("d"):
-		try:
-			_, val = line.split()
-			DEBOUNCE_PERIOD = float(val) / 1000
-			print(f"Changed debounce period!\n Current: {val} ms")
-		except:
+        try:
+            _, val = line.split()
+            DEBOUNCE_PERIOD = float(val) / 1000
+            print(f"Changed debounce period!\n Current: {val} ms")
+        except:
             print('Invalid Sequence\nEnsure input format follows "d ___"')
     if line.lower() == "help":
         print_controls()
