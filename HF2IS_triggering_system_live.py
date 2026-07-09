@@ -23,7 +23,6 @@ INST_SAMPLE_DELAY = 0.0035
 INST_CLK_SYNC_DELAY = 0.001
 POLARITY_FLIPPED = False # Normal polarity means peak comes before min, flipped means min comes before peak
 
-
 min_val = 9999999999
 # Create directory to store snapshots
 try:
@@ -83,14 +82,15 @@ MAX_VOLTAGE_THRESHOLD = LF_BASELINE_PEAK_VOLTAGE
 
 
 # input/output detection and commands
-# input/output detection and commands
+
 def print_controls():
     print("Enter 'p' to flip polarity\n" \
-        "Enter 't' followed by a number to set threshold (mV)\n" \
-        "Enter 'd' followed by a number to set solenoid delay (ms)\n" \
-        "Enter 'd' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
-        "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time\n" \
-        "Enter 'help' to view commands again")
+          "Enter 't' followed by a number to set threshold (mV)\n" \
+          "Enter 's' followed by a number to set solenoid delay (ms)\n" \
+          "Enter 's' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
+          "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time\n" \
+          "Enter 'd' followed by a number to set debounce period (ms)" \
+          "Enter 'help' to view commands again")
 def asynch_keyboard_listener():
     print_controls()
     while True:
@@ -100,7 +100,7 @@ def asynch_keyboard_listener():
         handle_commands(line)
 
 def handle_commands(line):
-    global MAX_VOLTAGE_THRESHOLD, POLARITY_FLIPPED, SOLENOID_PAIR_DELAY, SOLENOID_1_DURATION, SOLENOID_2_DURATION, TRIGGER_LEAD_TIME_OFFSET
+    global MAX_VOLTAGE_THRESHOLD, POLARITY_FLIPPED, SOLENOID_PAIR_DELAY, SOLENOID_1_DURATION, SOLENOID_2_DURATION, TRIGGER_LEAD_TIME_OFFSET, DEBOUNCE_PERIOD
 
     if line.lower() == "p":
         POLARITY_FLIPPED = not POLARITY_FLIPPED
@@ -114,7 +114,7 @@ def handle_commands(line):
         except:
             print('Invalid Sequence\nEnsure input format follows "t ___"')
     
-    if line.lower().startswith("d"):
+    if line.lower().startswith("s"):
         try:
             # d {time} --> sets delay {time} between solenoid triggers (ms)
             # d {num} {time} --> sets duration of solenoid {num} to {time} (ms)
@@ -148,10 +148,15 @@ def handle_commands(line):
             print(f"Changed trigger lead time offset!\nCurrent: {val} ms")
         except:
             print('Invalid Sequence\nEnsure input format follows "l ___"')
-    
+    if line.lower().startswith("d"):
+		try:
+			_, val = line.split()
+			DEBOUNCE_PERIOD = float(val) / 1000
+			print(f"Changed debounce period!\n Current: {val} ms")
+		except:
+            print('Invalid Sequence\nEnsure input format follows "d ___"')
     if line.lower() == "help":
         print_controls()
-
 
 # Delay and Trigger functions
 # pulse_duration is how long the pin stays HIGH
