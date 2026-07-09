@@ -85,12 +85,15 @@ MAX_VOLTAGE_THRESHOLD = LF_BASELINE_PEAK_VOLTAGE
 
 # input/output detection and commands
 # input/output detection and commands
-def asynch_keyboard_listener():
+def print_controls():
     print("Enter 'p' to flip polarity\n" \
           "Enter 't' followed by a number to set threshold (mV)\n" \
           "Enter 'd' followed by a number to set solenoid delay (ms)\n" \
           "Enter 'd' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
-          "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time")
+          "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time\n" \
+          "Enter 'help' to view commands again")
+def asynch_keyboard_listener():
+    print_controls()
     while True:
         # polls stdin for input, waiting for newline to read input
         line = sys.stdin.readline().strip()
@@ -146,6 +149,9 @@ def handle_commands(line):
             print(f"Changed trigger lead time offset!\nCurrent: {val} ms")
         except:
             print('Invalid Sequence\nEnsure input format follows "l ___"')
+    
+    if line.lower() == "help":
+        print_controls()
 
 
 # Delay and Trigger functions
@@ -381,6 +387,7 @@ poll_error = False
 clk_sync_ready = False
 
 print("Ready to Receive Data!")
+asynch_keyboard_listener()
 
 start_time = time.time()
 
@@ -408,6 +415,8 @@ TRIGGER_LEAD_TIME_OFFSET = 0.0
 
 trigger_count = 0
 
+
+
 # main loop
 for i in range(NUM_LOOPS):
     
@@ -423,7 +432,8 @@ for i in range(NUM_LOOPS):
         # print(f"Syncing Clocks. Time last synced: {last_time_synced}")
         run_function_after_delay(0, calibrate_time_sync)
         clk_sync_ready = True
-        
+           
+
     poll_result = session.poll(recording_time=POLL_TIME)
         
     run_function_after_delay(0, lambda: trigger_function(PIN27))
@@ -516,6 +526,7 @@ for i in range(NUM_LOOPS):
     is_threshold_breached = False
     lf_baseline = np.mean(lf_rolling_avg)
 
+    
     if not POLARITY_FLIPPED: # max comes before min (normal)
         # normal polarity, threshold breached when we get a value thats greater than the max threshold + rolling mean
         is_threshold_breached =  lf_r_window[max_index] - lf_baseline >  MAX_VOLTAGE_THRESHOLD # flag for review
@@ -533,6 +544,8 @@ for i in range(NUM_LOOPS):
         # grab the index of detection, will be used later for classification
         detection_index = min_index
     
+
+    # used to track our debounce period
     current_timestamp = leading_peak_time
 
     if is_threshold_breached:
