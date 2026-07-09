@@ -86,11 +86,11 @@ MAX_VOLTAGE_THRESHOLD = LF_BASELINE_PEAK_VOLTAGE
 # input/output detection and commands
 def print_controls():
     print("Enter 'p' to flip polarity\n" \
-          "Enter 't' followed by a number to set threshold (mV)\n" \
-          "Enter 'd' followed by a number to set solenoid delay (ms)\n" \
-          "Enter 'd' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
-          "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time\n" \
-          "Enter 'help' to view commands again")
+        "Enter 't' followed by a number to set threshold (mV)\n" \
+        "Enter 'd' followed by a number to set solenoid delay (ms)\n" \
+        "Enter 'd' followed by 1 or 2 followed by a number to set solenoid (1,2) duration (ms)\n" \
+        "Enter 'l' followed by a number to set trigger lead time OFFSET (ms) -- a fixed correction on top of the per-bead measured travel time\n" \
+        "Enter 'help' to view commands again")
 def asynch_keyboard_listener():
     print_controls()
     while True:
@@ -196,8 +196,8 @@ def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_durati
     print(f"min val: {min_val * 1000:.3f} ms")
     
 def save_snapshot(r_window, t_window):
-	data = np.column_stack((rb_x.get_x_buffers(NUM_FRAMES), rb_y.get_x_buffers(NUM_FRAMES), r_window, t_window))
-	np.savetxt(SNAPSHOT_FILE_PATH+ str(time.time()) +"snapshot.csv", data, delimiter=",")
+    data = np.column_stack((rb_x.get_x_buffers(NUM_FRAMES), rb_y.get_x_buffers(NUM_FRAMES), r_window, t_window))
+    np.savetxt(SNAPSHOT_FILE_PATH+ str(time.time()) +"snapshot.csv", data, delimiter=",")
 
 
 # Instrument Sync Functions
@@ -316,7 +316,7 @@ aux_signal = poll_result[device.demods[0].sample]["auxin0"]
 timestamps = poll_result[device.demods[0].sample]["timestamp"]
 
 time_sync = [last_time_synced, get_calibrated_timestamp(aux_signal, timestamps)]
-		
+        
 print("time_sync:", time_sync)
 
 
@@ -384,152 +384,159 @@ trigger_count = 0
 
 # main loop
 for i in range(NUM_LOOPS):
-	
-	if i > 0 and (time.time()-start_loop_time) * 1000 > 75:
-		print(f"loop {i-1} time = {((time.time()-start_loop_time) * 1000):.3f} ms") 
-		print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
-		
-	start_loop_time = time.time()
-	
-	# Sync the raspberry pi to the instrument every loop to prevent clock drift 
-	# (i+1) % N == 0 means that this will sync every N loops
-	if (((i+1) % 500) == 0):
-		# print(f"Syncing Clocks. Time last synced: {last_time_synced}")
-		run_function_after_delay(0, calibrate_time_sync)
-		clk_sync_ready = True
-		
-	poll_result = session.poll(recording_time=POLL_TIME)
-		
-	run_function_after_delay(0, lambda: trigger_function(PIN27))
+    
+    if i > 0 and (time.time()-start_loop_time) * 1000 > 75:
+        print(f"loop {i-1} time = {((time.time()-start_loop_time) * 1000):.3f} ms") 
+        print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
+        
+    start_loop_time = time.time()
+    
+    # Sync the raspberry pi to the instrument every loop to prevent clock drift 
+    # (i+1) % N == 0 means that this will sync every N loops
+    if (((i+1) % 500) == 0):
+        # print(f"Syncing Clocks. Time last synced: {last_time_synced}")
+        run_function_after_delay(0, calibrate_time_sync)
+        clk_sync_ready = True
+        
+    poll_result = session.poll(recording_time=POLL_TIME)
+        
+    run_function_after_delay(0, lambda: trigger_function(PIN27))
 
-	loop_time = time.time()
-	# if i > 0:
-		# print(f"loop {i} after polling = {((time.time()) * 1000 % 10000):.3f} ms") 
-	try:
-		# store data from Lock-In Amplifier
-		x_signal 	= poll_result[device.demods[0].sample]["x"]
-		y_signal 	= poll_result[device.demods[0].sample]["y"]
-		timestamps 	= poll_result[device.demods[0].sample]["timestamp"]
-		aux_signal 	= poll_result[device.demods[0].sample]["auxin0"]
+    loop_time = time.time()
+    # if i > 0:
+        # print(f"loop {i} after polling = {((time.time()) * 1000 % 10000):.3f} ms") 
+    try:
+        # store data from Lock-In Amplifier
+        x_signal 	= poll_result[device.demods[0].sample]["x"]
+        y_signal 	= poll_result[device.demods[0].sample]["y"]
+        timestamps 	= poll_result[device.demods[0].sample]["timestamp"]
+        aux_signal 	= poll_result[device.demods[0].sample]["auxin0"]
 
-		# Check if there was any actual data to be polled
-		if (len(x_signal) < 10):
-			raise Exception("No poll data available")
-			
-		
-		rb_timestamp.add_sub_buffer(timestamps)
-		rb_x.add_sub_buffer(x_signal)
-		rb_y.add_sub_buffer(y_signal)
-		r = np.hypot(x_signal, y_signal)
-		rb_r.add_sub_buffer(r)
-		rb_auxin0.add_sub_buffer(aux_signal)
-		
-		# Check for a clock sync signal
-		if clk_sync_ready == True:
-			cal_ts = get_calibrated_timestamp(rb_auxin0.get_x_buffers(2), rb_timestamp.get_x_buffers(2))
-			# Check if the peak is actually in the buffer and return the timestamp
-			if (cal_ts != 0):
-				time_sync = [last_time_synced, cal_ts]
-				clk_sync_ready = False
-				# print("Clocks Synced")
-			
-		# take the average of the last 100 frames. This removes the DC offset from the recieved data.
-		rolling_avg = np.append(rolling_avg, np.mean(r))
-		if (i > 100):
-			rolling_avg = rolling_avg[1:]
-		poll_error = False
-		
-	except Exception as e:
-		poll_error = True
-		# print("Failed at loop number:", i, e)
-		# print(poll_result[device.demods[0].sample]["y"])
-		continue
-	
-	# threshold check block
-	r_window = rb_r.get_x_buffers(NUM_FRAMES)
-	max_index = np.argmax(r_window) # index of positive peak
-	min_index = np.argmin(r_window) # index of negative peak
-	t_window = rb_timestamp.get_x_buffers(NUM_FRAMES)
-	
-	# if i > 0:
-		# print(f"loop {i} after rolling buffer assignment = {((time.time()) * 1000 % 10000):.3f} ms") 
+        # Check if there was any actual data to be polled
+        if (len(x_signal) < 10):
+            raise Exception("No poll data available")
+            
+        
+        rb_timestamp.add_sub_buffer(timestamps)
+        rb_x.add_sub_buffer(x_signal)
+        rb_y.add_sub_buffer(y_signal)
+        r = np.hypot(x_signal, y_signal)
+        rb_r.add_sub_buffer(r)
+        rb_auxin0.add_sub_buffer(aux_signal)
+        
+        # Check for a clock sync signal
+        if clk_sync_ready == True:
+            cal_ts = get_calibrated_timestamp(rb_auxin0.get_x_buffers(2), rb_timestamp.get_x_buffers(2))
+            # Check if the peak is actually in the buffer and return the timestamp
+            if (cal_ts != 0):
+                time_sync = [last_time_synced, cal_ts]
+                clk_sync_ready = False
+                # print("Clocks Synced")
+            
+        # take the average of the last 100 frames. This removes the DC offset from the recieved data.
+        rolling_avg = np.append(rolling_avg, np.mean(r))
+        if (i > 100):
+            rolling_avg = rolling_avg[1:]
+        poll_error = False
+        
+    except Exception as e:
+        poll_error = True
+        # print("Failed at loop number:", i, e)
+        # print(poll_result[device.demods[0].sample]["y"])
+        continue
+    
+    # threshold check block
+    r_window = rb_r.get_x_buffers(NUM_FRAMES)
+    max_index = np.argmax(r_window) # index of positive peak
+    min_index = np.argmin(r_window) # index of negative peak
+    t_window = rb_timestamp.get_x_buffers(NUM_FRAMES)
+    
+    # if i > 0:
+        # print(f"loop {i} after rolling buffer assignment = {((time.time()) * 1000 % 10000):.3f} ms") 
 
-	# polarity conditions
-	is_threshold_breached = False
-	baseline = np.mean(rolling_avg)
+    # polarity conditions
+    is_threshold_breached = False
+    baseline = np.mean(rolling_avg)
 
-	if not POLARITY_FLIPPED: # max comes before min (normal)
-		# normal polarity, threshold breached when we get a value thats greater than the max threshold + rolling mean
-		is_threshold_breached =  r_window[max_index] - baseline > (MAX_VOLTAGE_THRESHOLD)
-		peak_time_dif = (t_window[min_index] - t_window[max_index]) * MFIA_CLK_PERIOD
-		leading_peak_time = t_window[max_index]
-	
-	else: # min comes before max
-		is_threshold_breached = baseline - r_window[min_index] > (MAX_VOLTAGE_THRESHOLD)
-		peak_time_dif = (t_window[max_index] - t_window[min_index]) * MFIA_CLK_PERIOD
-		leading_peak_time = t_window[min_index]
-	
-	current_timestamp = leading_peak_time
+    if not POLARITY_FLIPPED: # max comes before min (normal)
+        # normal polarity, threshold breached when we get a value thats greater than the max threshold + rolling mean
+        is_threshold_breached =  r_window[max_index] - baseline > (MAX_VOLTAGE_THRESHOLD)
+        peak_time_dif = (t_window[min_index] - t_window[max_index]) * MFIA_CLK_PERIOD
+        leading_peak_time = t_window[max_index]
+    
+    else: # min comes before max
+        is_threshold_breached = baseline - r_window[min_index] > (MAX_VOLTAGE_THRESHOLD)
+        peak_time_dif = (t_window[max_index] - t_window[min_index]) * MFIA_CLK_PERIOD
+        leading_peak_time = t_window[min_index]
+    
+    current_timestamp = leading_peak_time
 
-	if is_threshold_breached:
-		if (last_activated_state == 8):
-			# Save snapshot of activation
-			run_function_after_delay(0, lambda: save_snapshot(r_window, t_window))
-		last_activated_state += 1
-		
-		# Calculate time difference and voltage difference between peaks
-		peak_voltage_dif = abs(r_window[max_index] - r_window[min_index]) # abs to guarantee positive voltage diff
-		# print(f"loop {i} inside first peak detect = {((time.time()) * 1000 % 10000):.3f} ms, prev V_dif = {prev_peak_voltage_dif}, current V_dif = {peak_voltage_dif}") 
-		# Trigger Condition. Checks the following:
-		# Large enough voltage difference
-		# The postive peak comes before the negative peak (in time)
-		# The timestamps are after the previous activation's timestamps (to prevent duplicate triggers from the same data)
-		# If the current peak voltage difference is less than or equal to the previous loop's. (To allow full peak difference to be calculated before triggering)
-		if (peak_voltage_dif > MAX_VOLTAGE_THRESHOLD and peak_time_dif > 0 and ((t_window[min_index] > prev_timestamps[0]) and (t_window[max_index] > prev_timestamps[0])) and prev_peak_voltage_dif >= peak_voltage_dif):
-			print(f"loop {i} during trigger = {((time.time()) * 1000 % 10000):.3f} ms") 
-			# Check if the function is repeating data
-			prev_timestamps = [t_window[min_index], t_window[max_index]]
-			
-			# Trigger the trigger function
-			print(f"trigger function called at {time.time()}")
-			# leading_peak_time is the timestamp of whatever peak occurs first in time (min peak or max peak depending on polarity)
-			calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_1, leading_peak_time, SOLENOID_1_DURATION)
-			calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_2 , leading_peak_time, SOLENOID_2_DURATION, extra_delay= SOLENOID_PAIR_DELAY)
-               
-			# Peak Statistics
-			print(f"Vmax  = {r_window[max_index] * 1000:.4f} mV |") 
-			print(f"Vmin  = {r_window[min_index] * 1000:.4f} mV |") 
-			print(f"Vdiff = {peak_voltage_dif * 1000:.4f} mV | Tdiff = {peak_time_dif*1000:.3f} ms") 
-			print(f"time since start        = {(time.time() - start_time):.3f} s")
-			print(f"time since acq of data  = {(time.time() - loop_time)*1000:.3f} ms")
-			print(f"time since loop start   = {(time.time() - start_loop_time)*1000:.3f} ms\n")
-			print(f"number of triggers since start of loop: {trigger_count}\n")
-			triggered = True
-			prev_peak_voltage_dif = peak_voltage_dif
-		if (triggered == False):
-			prev_peak_voltage_dif = peak_voltage_dif
-	
-	else:
-		triggered = False
-		prev_peak_voltage_dif = 0
-		last_activated_state = 0
-	
-	# if i > 0:
-		# print(f"loop {i} end loop = {((time.time()) * 1000 % 10000):.3f} ms") 
-	
-	# num_samples += len(poll_result[device.demods[0].sample]["x"])
-	
-	# xxx = np.append(xxx, rb_r.get_x_buffers(1))
-	# if (i > 120):
-		# xxx = xxx[int(len(xxx)/120):]
-	# line.set_ydata(xxx[::8])
-	# line.set_xdata(np.arange(len((xxx[::8]))))
-	
-	# plt.draw()
-	# plt.pause(0.000001)
+    if is_threshold_breached:
+        if (last_activated_state == 8):
+            # Save snapshot of activation
+            run_function_after_delay(0, lambda: save_snapshot(r_window, t_window))
+        last_activated_state += 1
+        
 
-	
-	
+        
+        # Calculate time difference and voltage difference between peaks
+        peak_voltage_dif = abs(r_window[max_index] - r_window[min_index]) # abs to guarantee positive voltage diff
+        # print(f"loop {i} inside first peak detect = {((time.time()) * 1000 % 10000):.3f} ms, prev V_dif = {prev_peak_voltage_dif}, current V_dif = {peak_voltage_dif}") 
+        # Trigger Condition. Checks the following:
+        # Large enough voltage difference
+        # The postive peak comes before the negative peak (in time)
+        # The timestamps are after the previous activation's timestamps (to prevent duplicate triggers from the same data)
+        # If the current peak voltage difference is less than or equal to the previous loop's. (To allow full peak difference to be calculated before triggering)
+        if (peak_voltage_dif > MAX_VOLTAGE_THRESHOLD and peak_time_dif > 0 and ((t_window[min_index] > prev_timestamps[0]) and (t_window[max_index] > prev_timestamps[0])) and prev_peak_voltage_dif >= peak_voltage_dif):
+            if (current_timestamp - last_trigger_timestamp) * MFIA_CLK_PERIOD < DEBOUNCE_PERIOD:
+                continue
+                
+            print(f"loop {i} during trigger = {((time.time()) * 1000 % 10000):.3f} ms") 
+            # Check if the function is repeating data
+            prev_timestamps = [t_window[min_index], t_window[max_index]]
+            
+            # Trigger the trigger function
+            print(f"trigger function called at {time.time()}")
+            last_trigger_timestamp = current_timestamp
+            trigger_count += 1
+            # leading_peak_time is the timestamp of whatever peak occurs first in time (min peak or max peak depending on polarity)
+            calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_1, leading_peak_time, SOLENOID_1_DURATION)
+            calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_2 , leading_peak_time, SOLENOID_2_DURATION, extra_delay= SOLENOID_PAIR_DELAY)
+            
+            # Peak Statistics
+            print(f"Vmax  = {r_window[max_index] * 1000:.4f} mV |") 
+            print(f"Vmin  = {r_window[min_index] * 1000:.4f} mV |") 
+            print(f"Vdiff = {peak_voltage_dif * 1000:.4f} mV | Tdiff = {peak_time_dif*1000:.3f} ms") 
+            print(f"time since start        = {(time.time() - start_time):.3f} s")
+            print(f"time since acq of data  = {(time.time() - loop_time)*1000:.3f} ms")
+            print(f"time since loop start   = {(time.time() - start_loop_time)*1000:.3f} ms\n")
+            print(f"number of triggers since start of loop: {trigger_count}\n")
+            triggered = True
+            prev_peak_voltage_dif = peak_voltage_dif
+        if (triggered == False):
+            prev_peak_voltage_dif = peak_voltage_dif
+    
+    else:
+        triggered = False
+        prev_peak_voltage_dif = 0
+        last_activated_state = 0
+    
+    # if i > 0:
+        # print(f"loop {i} end loop = {((time.time()) * 1000 % 10000):.3f} ms") 
+    
+    # num_samples += len(poll_result[device.demods[0].sample]["x"])
+    
+    # xxx = np.append(xxx, rb_r.get_x_buffers(1))
+    # if (i > 120):
+        # xxx = xxx[int(len(xxx)/120):]
+    # line.set_ydata(xxx[::8])
+    # line.set_xdata(np.arange(len((xxx[::8]))))
+    
+    # plt.draw()
+    # plt.pause(0.000001)
+
+    
+    
 # results
 end_time = time.time()
 diff_time = end_time - start_time
