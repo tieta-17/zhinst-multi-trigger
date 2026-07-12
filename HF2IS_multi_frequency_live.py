@@ -13,7 +13,7 @@ import sys
 # MAX_MIN_VOLTAGE_THRESHOLD = 0.00003 # Threshold for triggering based on the distance between the maximum and minimum voltage
 # MAX_VOLTAGE_THRESHOLD     = MAX_MIN_VOLTAGE_THRESHOLD / 2 # Threshold for triggering based on the maximum voltage. The voltage must reach this level to trigger. SAME AS LF_BEAD_PEAK_VOLTAGE
 SAMPLING_RATE = 55100 # (Hz) (Will go to nearest rate choosen)
-POLL_TIME = 0.0 # Actual poll time is this number + loop delay. Leave this at 0 for fastest polling. Any value below 0.02 will result in some frames having only one value.
+POLL_TIME = 0.001 # Actual poll time is this number + loop delay. Leave this at 0 for fastest polling. Any value below 0.02 will result in some frames having only one value.
 SNAPSHOT_FILE_PATH = "./snapshots/" # folder where to store the snapshots
 TRIGGER_DELAY_SCALE = 0 # TRIGGER_DELAY_SCALE * time between peaks = total delay from the end of negative peak
 NUM_LOOPS = 5000000 # Number of loops to run. Set this to a really high number to run the program for a long time
@@ -84,7 +84,7 @@ MAX_VOLTAGE_THRESHOLD = LF_BASELINE_PEAK_VOLTAGE
 
 
 # input/output detection and commands
-# input/output detection and commands
+# need to implement threading for this to work
 def print_controls():
     print("Enter 'p' to flip polarity\n" \
         "Enter 't' followed by a number to set threshold (mV)\n" \
@@ -316,11 +316,11 @@ GPIO.setup(CLK_SYNC_PIN, GPIO.OUT)
 GPIO.output(CLK_SYNC_PIN, GPIO.LOW)
 
 # SOLENOID_PAIR_DELAY is the time between triggering solenoid 1 and solenoid 2
-SOLENOID_PAIR_DELAY = 0.05
+SOLENOID_PAIR_DELAY = 0.015
 
 # SOLENOID_{num}_DELAY is the time that each solenoid stays HIGH (clamped)
 SOLENOID_1_DURATION = 0.06
-SOLENOID_2_DURATION = 0.03
+SOLENOID_2_DURATION = 0.045
 
 
 device.demods[0].sample.subscribe()

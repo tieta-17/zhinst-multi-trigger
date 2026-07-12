@@ -2,6 +2,7 @@ from zhinst.toolkit import Session
 import numpy as np
 import time
 import RPi.GPIO as GPIO
+import os
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from zhinst.core import ziDAQServer
@@ -12,7 +13,7 @@ import sys
 # MAX_MIN_VOLTAGE_THRESHOLD = 0.00003 # Threshold for triggering based on the distance between the maximum and minimum voltage
 # MAX_VOLTAGE_THRESHOLD     = MAX_MIN_VOLTAGE_THRESHOLD / 2 # Threshold for triggering based on the maximum voltage. The voltage must reach this level to trigger. SAME AS LF_BEAD_PEAK_VOLTAGE
 SAMPLING_RATE = 55100 # (Hz) (Will go to nearest rate choosen)
-POLL_TIME = 0.0 # Actual poll time is this number + loop delay. Leave this at 0 for fastest polling. Any value below 0.02 will result in some frames having only one value.
+POLL_TIME = 0.001 # Actual poll time is this number + loop delay. Leave this at 0 for fastest polling. Any value below 0.02 will result in some frames having only one value.
 SNAPSHOT_FILE_PATH = "./snapshots/" # folder where to store the snapshots
 TRIGGER_DELAY_SCALE = 0 # TRIGGER_DELAY_SCALE * time between peaks = total delay from the end of negative peak
 NUM_LOOPS = 5000000 # Number of loops to run. Set this to a really high number to run the program for a long time
@@ -22,6 +23,7 @@ NUM_SUB_BUFFERS = 5000 # This sets the number of frames that each circular buffe
 INST_SAMPLE_DELAY = 0.0035
 INST_CLK_SYNC_DELAY = 0.001
 POLARITY_FLIPPED = False # Normal polarity means peak comes before min, flipped means min comes before peak
+
 
 min_val = 9999999999
 # Create directory to store snapshots
@@ -82,7 +84,7 @@ MAX_VOLTAGE_THRESHOLD = LF_BASELINE_PEAK_VOLTAGE
 
 
 # input/output detection and commands
-
+# need to implement threading for this to work
 def print_controls():
     print("Enter 'p' to flip polarity\n" \
         "Enter 't' followed by a number to set threshold (mV)\n" \
@@ -148,7 +150,7 @@ def handle_commands(line):
             print(f"Changed trigger lead time offset!\nCurrent: {val} ms")
         except:
             print('Invalid Sequence\nEnsure input format follows "l ___"')
-    if line.lower().startswith( ):
+    if line.lower().startswith("d"):
         try:
             _, val = line.split()
             DEBOUNCE_PERIOD = float(val) / 1000
@@ -157,6 +159,7 @@ def handle_commands(line):
             print('Invalid Sequence\nEnsure input format follows "d ___"')
     if line.lower() == "help":
         print_controls()
+
 
 # Delay and Trigger functions
 # pulse_duration is how long the pin stays HIGH
@@ -183,16 +186,14 @@ def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_durati
     
     peak_current_time_dif = system_time_difference - instrument_time_difference + INST_CLK_SYNC_DELAY
 
-    # SOLENOID_PAIR_DELAY is time between triggering solenoid 1 and solenoid 2
-
     # Derive this bead's travel time to the actuation zone from its OWN measured
     # transit time across the detection window (peak_time_dif), scaled by the
     # distance ratio, instead of assuming a fixed flow rate. This self-corrects
     # for flow rate drift and per-bead velocity variation automatically.
 
     # extra_delay is to account for solenoid 1 and 2 triggering at different times
-    trigger_lead_time = peak_time_dif * DISTANCE_RATIO
-    trigger_delay = trigger_lead_time + TRIGGER_LEAD_TIME_OFFSET - peak_current_time_dif - INST_SAMPLE_DELAY + extra_delay #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
+    # trigger_lead_time = peak_time_dif * DISTANCE_RATIO
+    trigger_delay = 0.220 + TRIGGER_LEAD_TIME_OFFSET - peak_current_time_dif - INST_SAMPLE_DELAY + extra_delay #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
     run_function_after_delay(trigger_delay, lambda: trigger_function(pin, pulse_duration))
     
     print(f"inst t dif: {instrument_time_difference * 1000:.3f} ms, sys t dif: {system_time_difference * 1000:.3f} ms, peak_current_time_dif = {peak_current_time_dif * 1000:.3f} ms, trigger_delay = {trigger_delay * 1000:.3f} ms, current time = {time.time():.3f}")
@@ -201,7 +202,7 @@ def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_durati
     print(f"min val: {min_val * 1000:.3f} ms")
     
 def save_snapshot(r_window, t_window):
-    data = np.column_stack((rb_x.get_x_buffers(NUM_FRAMES), rb_y.get_x_buffers(NUM_FRAMES), r_window, t_window))
+    data = np.column_stack((lf_ch.rb_x.get_x_buffers(NUM_FRAMES), lf_ch.rb_y.get_x_buffers(NUM_FRAMES), r_window, t_window))
     np.savetxt(SNAPSHOT_FILE_PATH+ str(time.time()) +"snapshot.csv", data, delimiter=",")
 
 
@@ -255,7 +256,22 @@ class rolling_buffer:
         print("\nbuffer length:", self.buffer_length)
         print("write index:", self.write_index)
         print(self.buffers,"\n")
+
+def normalize_phase(X,Y, phase_mean):
+    z = X + 1j * Y
+    z_norm = z * np.exp(-1j * phase_mean)
+    z_relative = np.angle(z_norm)
+    return z_relative
         
+# package each channel into its own class with own buffers
+# timestamp handled globally
+class Channel:
+    def __init__(self, demod_idx, n):
+        self.demod_idx = demod_idx
+        self.rb_x = rolling_buffer(n)
+        self.rb_y = rolling_buffer(n)
+        self.rb_r = rolling_buffer(n)
+        self.rb_phase = rolling_buffer(n)
 
 print("hello world")
 
@@ -263,7 +279,7 @@ print("hello world")
 session = Session("localhost", hf2=True)
 device = session.connect_device("dev1051")
 
-MFIA_CLK_PERIOD = 1 / device.clockbase()
+MFIA_CLK_PERIOD = 1 / device.clockbase() # units is ns/tick
 CLOCKBASE = device.clockbase()
 
 
@@ -274,6 +290,11 @@ device.demods[0].enable(True)
 device.demods[0].adcselect(0) # Set to Signal Voltage Input
 # device.imps[0].enable(0) # Hopefully turn off measurement control
 device.demods[0].rate(SAMPLING_RATE) # Set Sampling Rate
+
+device.demods[1].enable(True)
+device.demods[1].adcselect(0) # Set to Signal Voltage Input
+# device.imps[0].enable(0) # Hopefully turn off measurement control
+device.demods[1].rate(SAMPLING_RATE) # Set Sampling Rate
 
 
 time.sleep(0.1)
@@ -301,13 +322,15 @@ GPIO.setup(CLK_SYNC_PIN, GPIO.OUT)
 GPIO.output(CLK_SYNC_PIN, GPIO.LOW)
 
 # SOLENOID_PAIR_DELAY is the time between triggering solenoid 1 and solenoid 2
-SOLENOID_PAIR_DELAY = 0.05
+SOLENOID_PAIR_DELAY = 0.015
 
 # SOLENOID_{num}_DELAY is the time that each solenoid stays HIGH (clamped)
 SOLENOID_1_DURATION = 0.06
-SOLENOID_2_DURATION = 0.03
+SOLENOID_2_DURATION = 0.045
+
 
 device.demods[0].sample.subscribe()
+device.demods[1].sample.subscribe()
 time.sleep(0.0005)
 num_samples = 0
 
@@ -331,6 +354,7 @@ print("time_sync:", time_sync)
 # sample_bin_length = np.random.randint(1000,2200)
 # sample_timestamp = np.linspace(0, 20, len(sample_data))
 
+'''
 # Buffer Setup
 rb_x 			= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
 rb_y 			= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
@@ -338,6 +362,22 @@ rb_r 			= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
 rb_timestamp 	= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
 rb_auxin0		= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
 rolling_avg 	= np.empty(0)
+'''
+
+# buffer channel setup
+channels = {"LF": Channel(0, NUM_SUB_BUFFERS), "HF": Channel(1, NUM_SUB_BUFFERS)}
+
+lf_ch = channels["LF"]
+hf_ch = channels["HF"]
+
+lf_sample_path = device.demods[lf_ch.demod_idx].sample.path
+hf_sample_path = device.demods[hf_ch.demod_idx].sample.path
+
+rb_timestamps 	= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
+rb_auxin0		= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
+
+lf_rolling_avg = np.empty(0)
+hf_rolling_avg = np.empty(0)
 
 # Real time plot setup
 # plt.ion()
@@ -387,6 +427,8 @@ TRIGGER_LEAD_TIME_OFFSET = 0.0
 
 trigger_count = 0
 
+
+
 # main loop
 for i in range(NUM_LOOPS):
     
@@ -403,6 +445,7 @@ for i in range(NUM_LOOPS):
         run_function_after_delay(0, calibrate_time_sync)
         clk_sync_ready = True
         
+
     poll_result = session.poll(recording_time=POLL_TIME)
         
     run_function_after_delay(0, lambda: trigger_function(PIN27))
@@ -412,26 +455,58 @@ for i in range(NUM_LOOPS):
         # print(f"loop {i} after polling = {((time.time()) * 1000 % 10000):.3f} ms") 
     try:
         # store data from Lock-In Amplifier
-        x_signal 	= poll_result[device.demods[0].sample]["x"]
-        y_signal 	= poll_result[device.demods[0].sample]["y"]
-        timestamps 	= poll_result[device.demods[0].sample]["timestamp"]
-        aux_signal 	= poll_result[device.demods[0].sample]["auxin0"]
+
+        # 2. Check if BOTH channels actually returned data in this slice
+        if lf_sample_path not in poll_result or hf_sample_path not in poll_result:
+            # Safely skip this specific micro-poll without triggering an error state
+            continue
+
+        lf_data = poll_result[lf_sample_path]
+        hf_data = poll_result[hf_sample_path]
+
+        lf_x = lf_data["x"]
+        hf_x = hf_data["x"]
 
         # Check if there was any actual data to be polled
-        if (len(x_signal) < 10):
+        if (len(lf_x) < 10 or len(hf_x) < 10):
             raise Exception("No poll data available")
-            
         
-        rb_timestamp.add_sub_buffer(timestamps)
-        rb_x.add_sub_buffer(x_signal)
-        rb_y.add_sub_buffer(y_signal)
-        r = np.hypot(x_signal, y_signal)
-        rb_r.add_sub_buffer(r)
+        # timestamps/aux signals
+        timestamps 	= lf_data["timestamp"]
+        rb_timestamps.add_sub_buffer(timestamps)
+
+        aux_signal 	= lf_data["auxin0"]
         rb_auxin0.add_sub_buffer(aux_signal)
+
+        # LF channel data
+        lf_y = lf_data["y"]
+        lf_r = np.hypot(lf_x, lf_y)
+        # lf_phase = np.radians(lf_data["phase"])p
+
+        lf_complex = lf_x + 1j*lf_y
+        lf_phase = np.angle(lf_complex)
+
+        lf_ch.rb_x.add_sub_buffer(lf_x)
+        lf_ch.rb_y.add_sub_buffer(lf_y)
+        lf_ch.rb_r.add_sub_buffer(lf_r)
+        lf_ch.rb_phase.add_sub_buffer(lf_phase)
+
+        # HF channel data
+        hf_y = hf_data["y"]
+        hf_r = np.hypot(hf_x, hf_y)
+        # hf_phase = np.radians(hf_data["phase"])
         
+        hf_complex = hf_x + 1j*hf_y
+        hf_phase = np.angle(hf_complex)
+        
+        hf_ch.rb_x.add_sub_buffer(hf_x)
+        hf_ch.rb_y.add_sub_buffer(hf_y)
+        hf_ch.rb_r.add_sub_buffer(hf_r)
+        hf_ch.rb_phase.add_sub_buffer(hf_phase)
+                
         # Check for a clock sync signal
         if clk_sync_ready == True:
-            cal_ts = get_calibrated_timestamp(rb_auxin0.get_x_buffers(2), rb_timestamp.get_x_buffers(2))
+            cal_ts = get_calibrated_timestamp(rb_auxin0.get_x_buffers(2), rb_timestamps.get_x_buffers(2))
             # Check if the peak is actually in the buffer and return the timestamp
             if (cal_ts != 0):
                 time_sync = [last_time_synced, cal_ts]
@@ -439,9 +514,9 @@ for i in range(NUM_LOOPS):
                 # print("Clocks Synced")
             
         # take the average of the last 100 frames. This removes the DC offset from the recieved data.
-        rolling_avg = np.append(rolling_avg, np.mean(r))
+        lf_rolling_avg = np.append(lf_rolling_avg, np.mean(lf_r))
         if (i > 100):
-            rolling_avg = rolling_avg[1:]
+            lf_rolling_avg = lf_rolling_avg[1:]
         poll_error = False
         
     except Exception as e:
@@ -450,42 +525,61 @@ for i in range(NUM_LOOPS):
         # print(poll_result[device.demods[0].sample]["y"])
         continue
     
-    # threshold check block
-    r_window = rb_r.get_x_buffers(NUM_FRAMES)
-    max_index = np.argmax(r_window) # index of positive peak
-    min_index = np.argmin(r_window) # index of negative peak
-    t_window = rb_timestamp.get_x_buffers(NUM_FRAMES)
+    '''
+    For the first step in our triggering, we must ensure that the particle is of adequate size, that is
+    the low-frequency amplitude must exceed a certain threshold.
+
+    Particles of size BEAD_SIZE_UM or larger will have a low-frequency response of LF_BASELINE_PEAK_VOLTAGE
+
+    To check for size we only need the low-frequency ampltiude
+    '''
+    # threshold for size
+    lf_r_window = lf_ch.rb_r.get_x_buffers(NUM_FRAMES)
+    max_index = np.argmax(lf_r_window) # index of positive peak
+    min_index = np.argmin(lf_r_window) # index of negative peak
+    t_window = rb_timestamps.get_x_buffers(NUM_FRAMES)
+
+    # threshold for phase
+    lf_phase_window = lf_ch.rb_phase.get_x_buffers(NUM_FRAMES)
+    hf_phase_window = hf_ch.rb_phase.get_x_buffers(NUM_FRAMES)
     
     # if i > 0:
         # print(f"loop {i} after rolling buffer assignment = {((time.time()) * 1000 % 10000):.3f} ms") 
 
     # polarity conditions
     is_threshold_breached = False
-    baseline = np.mean(rolling_avg)
+    lf_baseline = np.mean(lf_rolling_avg)
 
+    
     if not POLARITY_FLIPPED: # max comes before min (normal)
         # normal polarity, threshold breached when we get a value thats greater than the max threshold + rolling mean
-        is_threshold_breached =  r_window[max_index] - baseline > (MAX_VOLTAGE_THRESHOLD)
+        is_threshold_breached =  lf_r_window[max_index] - lf_baseline >  MAX_VOLTAGE_THRESHOLD # flag for review
         peak_time_dif = (t_window[min_index] - t_window[max_index]) * MFIA_CLK_PERIOD
         leading_peak_time = t_window[max_index]
+
+        # grab the index of detection, will be used later for classification
+        detection_index = max_index
     
     else: # min comes before max
-        is_threshold_breached = baseline - r_window[min_index] > (MAX_VOLTAGE_THRESHOLD)
+        is_threshold_breached = lf_baseline - lf_r_window[min_index] >  MAX_VOLTAGE_THRESHOLD # flag for review
         peak_time_dif = (t_window[max_index] - t_window[min_index]) * MFIA_CLK_PERIOD
         leading_peak_time = t_window[min_index]
+
+        # grab the index of detection, will be used later for classification
+        detection_index = min_index
     
+
+    # used to track our debounce period
     current_timestamp = leading_peak_time
 
     if is_threshold_breached:
         if (last_activated_state == 8):
             # Save snapshot of activation
-            run_function_after_delay(0, lambda: save_snapshot(r_window, t_window))
+            run_function_after_delay(0, lambda: save_snapshot(lf_r_window, t_window))
         last_activated_state += 1
         
-
-        
         # Calculate time difference and voltage difference between peaks
-        peak_voltage_dif = abs(r_window[max_index] - r_window[min_index]) # abs to guarantee positive voltage diff
+        peak_voltage_dif = abs(lf_r_window[max_index] - lf_r_window[min_index]) # abs to guarantee positive voltage diff
         # print(f"loop {i} inside first peak detect = {((time.time()) * 1000 % 10000):.3f} ms, prev V_dif = {prev_peak_voltage_dif}, current V_dif = {peak_voltage_dif}") 
         # Trigger Condition. Checks the following:
         # Large enough voltage difference
@@ -493,34 +587,52 @@ for i in range(NUM_LOOPS):
         # The timestamps are after the previous activation's timestamps (to prevent duplicate triggers from the same data)
         # If the current peak voltage difference is less than or equal to the previous loop's. (To allow full peak difference to be calculated before triggering)
         if (peak_voltage_dif > MAX_VOLTAGE_THRESHOLD and peak_time_dif > 0 and ((t_window[min_index] > prev_timestamps[0]) and (t_window[max_index] > prev_timestamps[0])) and prev_peak_voltage_dif >= peak_voltage_dif):
+            # debounce period of 100 ms, current_timestemp - last_triger_timestamp is the ticks since last trigger
             if (current_timestamp - last_trigger_timestamp) * MFIA_CLK_PERIOD < DEBOUNCE_PERIOD:
                 continue
-                
+            
+            print(f"Cell is of adequate size!")
             print(f"loop {i} during trigger = {((time.time()) * 1000 % 10000):.3f} ms") 
             # Check if the function is repeating data
             prev_timestamps = [t_window[min_index], t_window[max_index]]
             
-            # Trigger the trigger function
-            print(f"trigger function called at {time.time()}")
-            last_trigger_timestamp = current_timestamp
-            trigger_count += 1
-            # leading_peak_time is the timestamp of whatever peak occurs first in time (min peak or max peak depending on polarity)
-            calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_1, leading_peak_time, SOLENOID_1_DURATION)
-            calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_2 , leading_peak_time, SOLENOID_2_DURATION, extra_delay= SOLENOID_PAIR_DELAY)
+            # To classify cell as dead or alive, look at where the phase at the peak lies compared to ranges given in calibration.json
+            # lf_phase_range = [min_phase, max_phase]
+            # hf_phase_range = [min_phase, max_phase]
+            # if the lf_phase_at_peak and hf_phase_at_peak fall within this window --> cell is alive, trigger
+            lf_phase_centered = normalize_phase(lf_x[detection_index], lf_y[detection_index], LF_BEAD_PHASE_MEAN)
+            hf_phase_centered = normalize_phase(hf_x[detection_index], lf_y[detection_index], HF_BEAD_PHASE_MEAN)
+
+            # check if cell is in window
+            is_lf_in_window = LF_PHASE_RANGE[0] <= lf_phase_centered <= LF_PHASE_RANGE[1]
+            is_hf_in_window = HF_PHASE_RANGE[0] <= hf_phase_centered <= HF_PHASE_RANGE[1]
+
+            if (is_lf_in_window and is_hf_in_window):
+                print("Cell classified as live!")
+                trigger_count += 1
+                last_trigger_timestamp = current_timestamp
+                # Trigger the trigger function
+                print(f"Trigger function called at {time.time()}")
+                # leading_peak_time is the timestamp of whatever peak occurs first in time (min peak or max peak depending on polarity)
+                calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_1, leading_peak_time, SOLENOID_1_DURATION)
+
+                # trigger second solenoid some time (SOLENOID_DELAY) after the first pin
+                calculate_delay_and_trigger(peak_time_dif, SOLENOID_PIN_2 , leading_peak_time, SOLENOID_2_DURATION, extra_delay= SOLENOID_PAIR_DELAY)
+                
             
-            # Peak Statistics
-            print(f"Vmax  = {r_window[max_index] * 1000:.4f} mV |") 
-            print(f"Vmin  = {r_window[min_index] * 1000:.4f} mV |") 
-            print(f"Vdiff = {peak_voltage_dif * 1000:.4f} mV | Tdiff = {peak_time_dif*1000:.3f} ms") 
-            print(f"time since start        = {(time.time() - start_time):.3f} s")
-            print(f"time since acq of data  = {(time.time() - loop_time)*1000:.3f} ms")
-            print(f"time since loop start   = {(time.time() - start_loop_time)*1000:.3f} ms\n")
-            print(f"number of triggers since start of loop: {trigger_count}\n")
-            triggered = True
-            prev_peak_voltage_dif = peak_voltage_dif
+                # Peak Statistics
+                print(f"Vmax  = {lf_r_window[max_index] * 1000:.4f} mV |") 
+                print(f"Vmin  = {lf_r_window[min_index] * 1000:.4f} mV |") 
+                print(f"Vdiff = {peak_voltage_dif * 1000:.4f} mV | Tdiff = {peak_time_dif*1000:.3f} ms") 
+                print(f"time since start        = {(time.time() - start_time):.3f} s")
+                print(f"time since acq of data  = {(time.time() - loop_time)*1000:.3f} ms")
+                print(f"time since loop start   = {(time.time() - start_loop_time)*1000:.3f} ms\n")
+                print(f"number of triggers since start of loop: {trigger_count}\n")
+                triggered = True
+                prev_peak_voltage_dif = peak_voltage_dif
+    
         if (triggered == False):
             prev_peak_voltage_dif = peak_voltage_dif
-    
     else:
         triggered = False
         prev_peak_voltage_dif = 0
@@ -539,10 +651,10 @@ for i in range(NUM_LOOPS):
     
     # plt.draw()
     # plt.pause(0.000001)
-
-    
     
 # results
+
+
 end_time = time.time()
 diff_time = end_time - start_time
 
@@ -555,9 +667,9 @@ device.unsubscribe()
 print("\n")
 
 _, axis = plt.subplots(1, 1)
-axis.plot((rb_timestamp.get_full_buffer()[500::]-rb_timestamp.get_full_buffer()[0])*MFIA_CLK_PERIOD, rb_r.get_full_buffer()[500::])
-max_value = np.max(rb_r.get_full_buffer())
-min_value = np.min(rb_r.get_full_buffer())
+axis.plot((rb_timestamps.get_full_buffer()[500::]-rb_timestamps.get_full_buffer()[0])*MFIA_CLK_PERIOD, lf_ch.rb_r.get_full_buffer()[500::])
+max_value = np.max(lf_ch.rb_r.get_full_buffer())
+min_value = np.min(lf_ch.rb_r.get_full_buffer())
 print((max_value + min_value)/2)
 
 axis.grid(True)
