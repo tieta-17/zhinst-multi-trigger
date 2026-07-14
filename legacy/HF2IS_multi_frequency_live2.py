@@ -545,6 +545,13 @@ for i in range(NUM_LOOPS):
     lf_phase_window = lf_rb_phase.get_x_buffers(NUM_FRAMES)
     hf_phase_window = hf_rb_phase.get_x_buffers(NUM_FRAMES)
     
+    # windows for x and y
+    lf_x_window = lf_rb_x.get_x_buffers(NUM_FRAMES)
+    lf_y_window = lf_rb_y.get_x_buffers(NUM_FRAMES)
+    
+    hf_x_window = hf_rb_x.get_x_buffers(NUM_FRAMES)
+    hf_y_window = hf_rb_y.get_x_buffers(NUM_FRAMES)
+    
     # if i > 0:
         # print(f"loop {i} after rolling buffer assignment = {((time.time()) * 1000 % 10000):.3f} ms") 
 
@@ -609,8 +616,8 @@ for i in range(NUM_LOOPS):
             #lf_phase_centered = lf_phase_at_peak - LF_BEAD_PHASE_MEAN
             #hf_phase_centered = hf_phase_at_peak - HF_BEAD_PHASE_MEAN
 
-            lf_phase_centered = normalize_phase(lf_x[detection_index], lf_y[detection_index], LF_BEAD_PHASE_MEAN)
-            hf_phase_centered = normalize_phase(hf_x[detection_index], hf_y[detection_index], HF_BEAD_PHASE_MEAN)
+            lf_phase_centered = normalize_phase(lf_x_window[detection_index], lf_y_window[detection_index], LF_BEAD_PHASE_MEAN)
+            hf_phase_centered = normalize_phase(hf_x_window[detection_index], hf_y_window[detection_index], HF_BEAD_PHASE_MEAN)
             
             # check if cell is in window
             is_lf_in_window = LF_PHASE_RANGE[0] <= lf_phase_centered <= LF_PHASE_RANGE[1]
