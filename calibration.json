@@ -5,11 +5,11 @@
 	},
 	"high_frequency_hf": {
 		"bead_phase_mean": -1.46608,
-		"phase_range_box": [-0.01745, 0.01745]
+		"phase_range_box": [-1, 1]
 	},
 	"low_frequency_lf": {
 		"bead_phase_mean": 0.33161,
-		"baseline_to_peak_voltage": 0.00005,
-		"phase_range_box": [-0.00349, 0.00349]
+		"baseline_to_peak_voltage": 0.0005,
+		"phase_range_box": [-1, 1]
 	}
 }

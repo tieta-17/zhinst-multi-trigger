@@ -191,8 +191,8 @@ def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_durati
     # for flow rate drift and per-bead velocity variation automatically.
 
     # extra_delay is to account for solenoid 1 and 2 triggering at different times
-    trigger_lead_time = peak_time_dif * DISTANCE_RATIO
-    trigger_delay = trigger_lead_time + TRIGGER_LEAD_TIME_OFFSET - peak_current_time_dif - INST_SAMPLE_DELAY + extra_delay #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
+    # trigger_lead_time = peak_time_dif * DISTANCE_RATIO
+    trigger_delay = 0.225 + TRIGGER_LEAD_TIME_OFFSET - peak_current_time_dif - INST_SAMPLE_DELAY + extra_delay #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
     run_function_after_delay(trigger_delay, lambda: trigger_function(pin, pulse_duration))
     
     print(f"inst t dif: {instrument_time_difference * 1000:.3f} ms, sys t dif: {system_time_difference * 1000:.3f} ms, peak_current_time_dif = {peak_current_time_dif * 1000:.3f} ms, trigger_delay = {trigger_delay * 1000:.3f} ms, current time = {time.time():.3f}")
@@ -359,7 +359,6 @@ poll_error = False
 clk_sync_ready = False
 
 print("Ready to Receive Data!")
-asynch_keyboard_listener()
 
 start_time = time.time()
 
@@ -368,7 +367,7 @@ start_time = time.time()
 last_trigger_timestamp  = 0
 
 # DEBOUNCE_PERIOD is the minimum time between triggers. Any trigger less than DEBOUNCE_PERIOD is void
-DEBOUNCE_PERIOD = 0.100 # 100ms debounce period
+DEBOUNCE_PERIOD = 0.350 # 100ms debounce period
 
 # DETECTION_TO_ACTUATION_UM is the distance from detection from the sensors to actuation with the solenoids
 # DETECTION_WINDOW_UM is the distance of the sensors
@@ -386,6 +385,7 @@ DISTANCE_RATIO = DETECTION_TO_ACTUATION_UM / DETECTION_WINDOW_UM
 TRIGGER_LEAD_TIME_OFFSET = 0.0
 
 trigger_count = 0
+triggered = False
 
 # main loop
 for i in range(NUM_LOOPS):
@@ -492,9 +492,9 @@ for i in range(NUM_LOOPS):
         # The postive peak comes before the negative peak (in time)
         # The timestamps are after the previous activation's timestamps (to prevent duplicate triggers from the same data)
         # If the current peak voltage difference is less than or equal to the previous loop's. (To allow full peak difference to be calculated before triggering)
-        if (peak_voltage_dif > MAX_VOLTAGE_THRESHOLD and peak_time_dif > 0 and ((t_window[min_index] > prev_timestamps[0]) and (t_window[max_index] > prev_timestamps[0])) and prev_peak_voltage_dif >= peak_voltage_dif):
-            if (current_timestamp - last_trigger_timestamp) * MFIA_CLK_PERIOD < DEBOUNCE_PERIOD:
-                continue
+        if (peak_voltage_dif > MAX_VOLTAGE_THRESHOLD and peak_time_dif > 0 and ((t_window[min_index] > prev_timestamps[0] * CLOCKBASE + DEBOUNCE_PERIOD) and (t_window[max_index] > prev_timestamps[0] * CLOCKBASE + DEBOUNCE_PERIOD)) and prev_peak_voltage_dif >= peak_voltage_dif):
+            # if (current_timestamp - last_trigger_timestamp) * MFIA_CLK_PERIOD < DEBOUNCE_PERIOD:
+            #    continue
                 
             print(f"loop {i} during trigger = {((time.time()) * 1000 % 10000):.3f} ms") 
             # Check if the function is repeating data
