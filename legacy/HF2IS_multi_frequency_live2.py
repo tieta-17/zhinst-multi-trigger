@@ -435,6 +435,12 @@ TRIGGER_LEAD_TIME_OFFSET = 0.0
 
 trigger_count = 0
 
+LF_ROTATION = np.exp(-1j*LF_BEAD_PHASE_MEAN)
+HF_ROTATION = np.exp(-1j*HF_BEAD_PHASE_MEAN)
+
+def normalize_phase(z, rotation):
+    return np.angle(z*rotation)
+
 
 print("Entering main loop")
 # main loop
@@ -616,9 +622,23 @@ for i in range(NUM_LOOPS):
             #lf_phase_centered = lf_phase_at_peak - LF_BEAD_PHASE_MEAN
             #hf_phase_centered = hf_phase_at_peak - HF_BEAD_PHASE_MEAN
 
-            lf_phase_centered = normalize_phase(lf_x_window[detection_index], lf_y_window[detection_index], LF_BEAD_PHASE_MEAN)
-            hf_phase_centered = normalize_phase(hf_x_window[detection_index], hf_y_window[detection_index], HF_BEAD_PHASE_MEAN)
+            # lf_phase_centered = normalize_phase(lf_x_window[detection_index], lf_y_window[detection_index], LF_BEAD_PHASE_MEAN)
+            # hf_phase_centered = normalize_phase(hf_x_window[detection_index], hf_y_window[detection_index], HF_BEAD_PHASE_MEAN)
             
+            z_lf = (
+                np.mean(lf_x_window[detection_index-3:detection_index+3]) +
+                1j * np.mean(lf_y_window[detection_index-3:detection_index+3])
+            )
+
+            z_hf = (
+                np.mean(hf_x_window[detection_index-3:detection_index+3]) +
+                1j * np.mean(hf_y_window[detection_index-3:detection_index+3])
+            )
+
+            # phase normalization
+            lf_phase_centered = np.angle(z_lf * LF_ROTATION)
+            hf_phase_centered = np.angle(z_hf * HF_ROTATION)
+
             # check if cell is in window
             is_lf_in_window = LF_PHASE_RANGE[0] <= lf_phase_centered <= LF_PHASE_RANGE[1]
             is_hf_in_window = HF_PHASE_RANGE[0] <= hf_phase_centered <= HF_PHASE_RANGE[1]
