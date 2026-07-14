@@ -613,8 +613,8 @@ for i in range(NUM_LOOPS):
             hf_phase_centered = normalize_phase(hf_x[detection_index], hf_y[detection_index], HF_BEAD_PHASE_MEAN)
             
             # check if cell is in window
-            is_lf_in_window = LF_PHASE_RANGE[0] < lf_phase_centered < LF_PHASE_RANGE[1]
-            is_hf_in_window = HF_PHASE_RANGE[0] < hf_phase_centered < HF_PHASE_RANGE[1]
+            is_lf_in_window = LF_PHASE_RANGE[0] <= lf_phase_centered <= LF_PHASE_RANGE[1]
+            is_hf_in_window = HF_PHASE_RANGE[0] <= hf_phase_centered <= HF_PHASE_RANGE[1]
             print(f"low-frequency phase: {lf_phase_at_peak}\n" \
                   f"high-frequency phase: {hf_phase_at_peak}\n" \
                   f"low-frequency centered phase: {lf_phase_centered}\n" \
