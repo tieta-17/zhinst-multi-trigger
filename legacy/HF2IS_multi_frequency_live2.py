@@ -191,8 +191,8 @@ def calculate_delay_and_trigger(peak_time_dif, pin, peak_timestamp, pulse_durati
     # for flow rate drift and per-bead velocity variation automatically.
 
     # extra_delay is to account for solenoid 1 and 2 triggering at different times
-    trigger_lead_time = peak_time_dif * DISTANCE_RATIO
-    trigger_delay = trigger_lead_time + TRIGGER_LEAD_TIME_OFFSET - peak_current_time_dif - INST_SAMPLE_DELAY + extra_delay #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
+    # trigger_lead_time = peak_time_dif * DISTANCE_RATIO
+    trigger_delay = 0.220 + TRIGGER_LEAD_TIME_OFFSET - peak_current_time_dif - INST_SAMPLE_DELAY + extra_delay #TRIGGER_DELAY_SCALE*peak_time_dif - peak_current_time_dif 
     run_function_after_delay(trigger_delay, lambda: trigger_function(pin, pulse_duration))
     
     print(f"inst t dif: {instrument_time_difference * 1000:.3f} ms, sys t dif: {system_time_difference * 1000:.3f} ms, peak_current_time_dif = {peak_current_time_dif * 1000:.3f} ms, trigger_delay = {trigger_delay * 1000:.3f} ms, current time = {time.time():.3f}")
