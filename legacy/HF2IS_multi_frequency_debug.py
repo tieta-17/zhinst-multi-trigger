@@ -257,7 +257,7 @@ class rolling_buffer:
         print("write index:", self.write_index)
         print(self.buffers,"\n")
 
-def normalize_phase(X,Y, phase_mean):
+def normalize_phase(X, Y, phase_mean):
     z = X + 1j * Y
     z_norm = z * np.exp(-1j * phase_mean)
     z_relative = np.angle(z_norm)
@@ -601,7 +601,7 @@ for i in range(NUM_LOOPS):
             # hf_phase_range = [min_phase, max_phase]
             # if the lf_phase_at_peak and hf_phase_at_peak fall within this window --> cell is alive, trigger
             lf_phase_centered = normalize_phase(lf_x[detection_index], lf_y[detection_index], LF_BEAD_PHASE_MEAN)
-            hf_phase_centered = normalize_phase(hf_x[detection_index], lf_y[detection_index], HF_BEAD_PHASE_MEAN)
+            hf_phase_centered = normalize_phase(hf_x[detection_index], hf_y[detection_index], HF_BEAD_PHASE_MEAN)
 
             # check if cell is in window
             is_lf_in_window = LF_PHASE_RANGE[0] <= lf_phase_centered <= LF_PHASE_RANGE[1]

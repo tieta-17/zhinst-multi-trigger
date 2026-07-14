@@ -160,7 +160,6 @@ def handle_commands(line):
     if line.lower() == "help":
         print_controls()
 
-
 # Delay and Trigger functions
 # pulse_duration is how long the pin stays HIGH
 def trigger_function(pin, pulse_duration = 0.05):
@@ -266,6 +265,12 @@ class Channel:
         self.rb_y = rolling_buffer(n)
         self.rb_r = rolling_buffer(n)
         self.rb_phase = rolling_buffer(n)
+
+def normalize_phase(X, Y, phase_mean):
+    z = X + 1j * Y
+    z_norm = z * np.exp(-1j * phase_mean)
+    z_relative = np.angle(z_norm)
+    return z_relative
 
 print("hello world")
 
@@ -479,7 +484,9 @@ for i in range(NUM_LOOPS):
         # LF channel data
         lf_y = poll_result[device.demods[0].sample]["y"]
         lf_r = np.hypot(lf_x, lf_y)
-        lf_phase = np.arctan(lf_y/lf_x)
+
+        lf_complex = lf_x + 1j*lf_y
+        lf_phase = np.angle(lf_complex)
 
         lf_rb_x.add_sub_buffer(lf_x)
         lf_rb_y.add_sub_buffer(lf_y)
@@ -489,7 +496,9 @@ for i in range(NUM_LOOPS):
         # HF channel data
         hf_y = poll_result[device.demods[1].sample]["y"]
         hf_r = np.hypot(hf_x, hf_y)
-        hf_phase = lf_phase = np.arctan(hf_y/hf_x)
+        
+        hf_complex = hf_x + 1j*hf_y
+        hf_phase = np.angle(hf_complex)
         
         hf_rb_x.add_sub_buffer(hf_x)
         hf_rb_y.add_sub_buffer(hf_y)
@@ -592,12 +601,16 @@ for i in range(NUM_LOOPS):
             # lf_phase_range = [min_phase, max_phase]
             # hf_phase_range = [min_phase, max_phase]
             # if the lf_phase_at_peak and hf_phase_at_peak fall within this window --> cell is alive, trigger
+            
             lf_phase_at_peak = lf_phase_window[detection_index]
             hf_phase_at_peak = hf_phase_window[detection_index]
 
             # center phase relative to means:
-            lf_phase_centered = lf_phase_at_peak - LF_BEAD_PHASE_MEAN
-            hf_phase_centered = hf_phase_at_peak - HF_BEAD_PHASE_MEAN
+            #lf_phase_centered = lf_phase_at_peak - LF_BEAD_PHASE_MEAN
+            #hf_phase_centered = hf_phase_at_peak - HF_BEAD_PHASE_MEAN
+
+            lf_phase_centered = normalize_phase(lf_x[detection_index], lf_y[detection_index], LF_BEAD_PHASE_MEAN)
+            hf_phase_centered = normalize_phase(hf_x[detection_index], hf_y[detection_index], HF_BEAD_PHASE_MEAN)
             
             # check if cell is in window
             is_lf_in_window = LF_PHASE_RANGE[0] < lf_phase_centered < LF_PHASE_RANGE[1]
@@ -669,8 +682,8 @@ print("\n")
 
 _, axis = plt.subplots(1, 1)
 axis.plot((rb_timestamps.get_full_buffer()[500::]-rb_timestamps.get_full_buffer()[0])*MFIA_CLK_PERIOD, lf_ch.rb_r.get_full_buffer()[500::])
-max_value = np.max(lf_ch.rb_r.get_full_buffer())
-min_value = np.min(lf_ch.rb_r.get_full_buffer())
+max_value = np.max(lf_rb_r.get_full_buffer())
+min_value = np.min(lf_rb_r.get_full_buffer())
 print((max_value + min_value)/2)
 
 axis.grid(True)

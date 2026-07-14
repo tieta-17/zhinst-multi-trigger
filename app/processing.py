@@ -12,3 +12,5 @@ def normalize_phase(X,Y, phase_mean):
     z_norm = z * np.exp(-1j * phase_mean)
     z_relative = np.angle(z_norm)
     return z_relative
+
+def rolling_avg()
