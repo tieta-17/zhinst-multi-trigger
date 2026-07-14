@@ -4,12 +4,12 @@
 		"notes": "Using baseline-to-peak voltage calibration instead of min-to-peak"
 	},
 	"high_frequency_hf": {
-		"bead_phase_mean": -2.13,
-		"phase_range_box": [-2.6,-2]
+		"bead_phase_mean": -1.46608,
+		"phase_range_box": [-0.01745, 0.01745]
 	},
 	"low_frequency_lf": {
-		"bead_phase_mean": 0.145,
+		"bead_phase_mean": 0.33161,
 		"baseline_to_peak_voltage": 0.00005,
-		"phase_range_box": [-0.2, -0.1]
+		"phase_range_box": [-0.00349, 0.00349]
 	}
 }
