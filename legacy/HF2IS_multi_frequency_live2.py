@@ -301,6 +301,11 @@ print("Sampling Rate = ",device.demods[0].rate())
 SAMPLING_RATE = device.demods[0].rate()
 print("Frequency = ",device.demods[0].freq())
 
+for d in (0, 1):
+    device.demods[d].order(4)          # same on both
+    device.demods[d].timeconstant(tc)  # same on both
+print("LF/HF order,tc:", device.demods[0].order(), device.demods[0].timeconstant(),
+                          device.demods[1].order(), device.demods[1].timeconstant())
 
 # Initalize GPIO
 GPIO.setmode(GPIO.BCM)
@@ -342,9 +347,11 @@ run_function_after_delay(0.1, calibrate_time_sync)
 poll_result = session.poll(recording_time=1)
 
 aux_signal = poll_result[device.demods[0].sample]["auxin0"]
-timestamps = poll_result[device.demods[0].sample]["timestamp"]
 
-time_sync = [last_time_synced, get_calibrated_timestamp(aux_signal, timestamps)]
+#LF timestamp is used for initial calibration
+lf_timestamps = poll_result[device.demods[0].sample]["timestamp"]
+
+time_sync = [last_time_synced, get_calibrated_timestamp(aux_signal, lf_timestamps)]
         
 print("time_sync:", time_sync)
 
@@ -382,11 +389,14 @@ hf_rb_r = rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
 hf_rb_phase = rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
 
 
-rb_timestamps 	= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
+lf_rb_timestamps 	= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
+hf_rb_timestamps = rolling_buffer(buffer_length=NUM_SUB_BUFFERS)
 rb_auxin0		= rolling_buffer(buffer_length = NUM_SUB_BUFFERS)
 
 lf_rolling_avg = np.empty(0)
 hf_rolling_avg = np.empty(0)
+lf_baseline_avg = np.empty(0, dtype=complex)   # NEW
+hf_baseline_avg = np.empty(0, dtype=complex)
 
 # Real time plot setup
 # plt.ion()
@@ -481,8 +491,11 @@ for i in range(NUM_LOOPS):
             raise Exception("No poll data available")
         
         # timestamps/aux signals
-        timestamps 	= poll_result[device.demods[0].sample]["timestamp"]
-        rb_timestamps.add_sub_buffer(timestamps)
+        lf_timestamps 	= poll_result[device.demods[0].sample]["timestamp"]
+        lf_rb_timestamps.add_sub_buffer(lf_timestamps)
+
+        hf_timestamps = poll_result[device.demods[1].sample]["timestamp"]
+        hf_rb_timestamps.add_sub_buffer(hf_timestamps)
 
         aux_signal 	= poll_result[device.demods[0].sample]["auxin0"]
         rb_auxin0.add_sub_buffer(aux_signal)
@@ -510,10 +523,19 @@ for i in range(NUM_LOOPS):
         hf_rb_y.add_sub_buffer(hf_y)
         hf_rb_r.add_sub_buffer(hf_r)
         hf_rb_phase.add_sub_buffer(hf_phase)
+
+        # complex DC baseline = live equivalent of MATLAB's filtfilt high-pass
+        lf_baseline_avg = np.append(lf_baseline_avg, np.mean(lf_complex))
+        hf_baseline_avg = np.append(hf_baseline_avg, np.mean(hf_complex))
+        if i > 100:
+            lf_baseline_avg = lf_baseline_avg[1:]
+            hf_baseline_avg = hf_baseline_avg[1:]
+        lf_baseline_complex = np.mean(lf_baseline_avg)
+        hf_baseline_complex = np.mean(hf_baseline_avg)
                 
         # Check for a clock sync signal
         if clk_sync_ready == True:
-            cal_ts = get_calibrated_timestamp(rb_auxin0.get_x_buffers(2), rb_timestamps.get_x_buffers(2))
+            cal_ts = get_calibrated_timestamp(rb_auxin0.get_x_buffers(2), lf_rb_timestamps.get_x_buffers(2))
             # Check if the peak is actually in the buffer and return the timestamp
             if (cal_ts != 0):
                 time_sync = [last_time_synced, cal_ts]
@@ -545,7 +567,7 @@ for i in range(NUM_LOOPS):
     lf_r_window = lf_rb_r.get_x_buffers(NUM_FRAMES)
     max_index = np.argmax(lf_r_window) # index of positive peak
     min_index = np.argmin(lf_r_window) # index of negative peak
-    t_window = rb_timestamps.get_x_buffers(NUM_FRAMES)
+    t_window = lf_rb_timestamps.get_x_buffers(NUM_FRAMES)
 
     # threshold for phase
     lf_phase_window = lf_rb_phase.get_x_buffers(NUM_FRAMES)
@@ -557,7 +579,10 @@ for i in range(NUM_LOOPS):
     
     hf_x_window = hf_rb_x.get_x_buffers(NUM_FRAMES)
     hf_y_window = hf_rb_y.get_x_buffers(NUM_FRAMES)
-    
+
+    # window for HF time sync
+    hf_t_window = hf_rb_timestamps.get_x_buffers(NUM_FRAMES)
+
     # if i > 0:
         # print(f"loop {i} after rolling buffer assignment = {((time.time()) * 1000 % 10000):.3f} ms") 
 
@@ -572,7 +597,7 @@ for i in range(NUM_LOOPS):
         leading_peak_time = t_window[max_index]
 
         # grab the index of detection, will be used later for classification
-        detection_index = max_index
+        size_detection_index = max_index
     
     else: # min comes before max
         is_threshold_breached = lf_baseline - lf_r_window[min_index] >  MAX_VOLTAGE_THRESHOLD # flag for review
@@ -580,7 +605,7 @@ for i in range(NUM_LOOPS):
         leading_peak_time = t_window[min_index]
 
         # grab the index of detection, will be used later for classification
-        detection_index = min_index
+        size_detection_index = min_index
     
 
     # used to track our debounce period
@@ -615,8 +640,12 @@ for i in range(NUM_LOOPS):
             # hf_phase_range = [min_phase, max_phase]
             # if the lf_phase_at_peak and hf_phase_at_peak fall within this window --> cell is alive, trigger
             
-            lf_phase_at_peak = lf_phase_window[detection_index]
-            hf_phase_at_peak = hf_phase_window[detection_index]
+            lf_phase_at_peak = lf_phase_window[size_detection_index]
+
+            # grab the HF peak relative to lf peak in TIME rather than index
+            # hf detection time is whatever the min value is 
+            hf_detect = np.argmin(np.abs(hf_t_window - t_window[size_detection_index]))
+            hf_phase_at_peak = hf_phase_window[hf_detect]
 
             # center phase relative to means:
             #lf_phase_centered = lf_phase_at_peak - LF_BEAD_PHASE_MEAN
@@ -626,14 +655,17 @@ for i in range(NUM_LOOPS):
             # hf_phase_centered = normalize_phase(hf_x_window[detection_index], hf_y_window[detection_index], HF_BEAD_PHASE_MEAN)
             
             z_lf = (
-                np.mean(lf_x_window[detection_index-3:detection_index+3]) +
-                1j * np.mean(lf_y_window[detection_index-3:detection_index+3])
+                np.mean(lf_x_window[size_detection_index-3:size_detection_index+3]) +
+                1j * np.mean(lf_y_window[size_detection_index-3:size_detection_index+3])
             )
 
             z_hf = (
-                np.mean(hf_x_window[detection_index-3:detection_index+3]) +
-                1j * np.mean(hf_y_window[detection_index-3:detection_index+3])
+                np.mean(hf_x_window[hf_detect-3:hf_detect+3]) +
+                1j * np.mean(hf_y_window[hf_detect-3:hf_detect+3])
             )
+
+            z_lf = z_lf - lf_baseline_complex   # perturbation vector, not raw
+            z_hf = z_hf - hf_baseline_complex   
 
             # phase normalization
             lf_phase_centered = np.angle(z_lf * LF_ROTATION)
